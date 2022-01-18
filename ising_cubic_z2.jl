@@ -17,16 +17,14 @@ function add_spin(p,nconf,k_max,pos,hx,hy,hz)
     dy    = OffsetArray{Int}(undef, 0:nconf-1)
     sflip = OffsetArray{Int}(undef, 0:nconf-1)
     preg  = OffsetArray{Int128}(undef, 0:nconf-1)
-    pnew  = OffsetArray{Int128}(undef, 0:nconf-1)
 
     # coordinates of the new spin within the 3d lattice
     x  = pos % hx
     y  = (pos ÷ hx) % hy
     z  = pos ÷ (hx*hy)
-    bp = x+hx*y # bitpos?
+    bp = x+hx*y # bitpos
 
     print("Pos=",pos," X=",x," Y=",y," Z=",z, " bp=",bp,"\n")
-
     
     if (x>0) # init spin functions as soon as lower x-neighbor is there
         @simd for spin = 0:nconf-1
@@ -48,32 +46,35 @@ function add_spin(p,nconf,k_max,pos,hx,hy,hz)
         dz = 0
     end       
 
-    @simd for s = 0:nconf-1
-        sflip[s] = s ⊻ (2^bp) # flipped config
-        #print("nconf=",nconf," sflip=",sflip[s],"\n")
-    end
     if (x==hx-1) && (y==hy-1)
         @simd for s = 0:nconf-1
             sflip[s] =  s ⊻ (2^bp-1) # use Z2 symmetry
+            #print("nconf=",nconf," sflip=",sflip[s],"\n")
+        end
+    else
+        @simd for s = 0:nconf-1
+            sflip[s] = s ⊻ (2^bp) # flipped config
             #print("nconf=",nconf," sflip=",sflip[s],"\n")
         end
     end     
 
     # update series expansion via recursion-step:
     for k in k_max:-1:1 # update all orders k>=1 
-        @simd for s=0:nconf-1
-            pnew[s] = p[s,k]+p[s,k-1]*(dx[s]+dy[s]+dz)+p[s,k-2]*(dx[s]*dy[s]+dx[s]*dz+dy[s]*dz)+p[s,k-3]*(dx[s]*dy[s]*dz)
-            preg[s] = p[s,k]-p[s,k-1]*(dx[s]+dy[s]+dz)+p[s,k-2]*(dx[s]*dy[s]+dx[s]*dz+dy[s]*dz)-p[s,k-3]*(dx[s]*dy[s]*dz)                     
+        @simd for s = 0:nconf-1
+            pnew      = p[s,k  ] + p[s,k-2]*(dx[s]*dy[s] + dx[s]*dz + dy[s]*dz)
+            term      = p[s,k-1]*(dx[s]+dy[s]+dz) + p[s,k-3]*(dx[s]*dy[s]*dz)
+            preg[s]   = pnew - term
+            p[s,k]    = pnew + term
         end
-        @simd for s=0:nconf-1
-            p[s,k] = ( pnew[s] + preg[sflip[s]] ) ÷ 2
-        end
+        @simd for s = 0:nconf-1
+            p[s,k] = (p[s,k] + preg[sflip[s]]) ÷ 2
+        end   
     end
 end
 
 # Set Parameter for Simple Cubic Lattice
 const k_max    = 24 # maximum order for series expansion
-const hx,hy,hz = (4,5,4) # cube size
+const hx,hy,hz = (5,5,5) # cube size
 const nconf    = 2^(hx*hy-1) # number of spin configs to keep track
 
 part1  = OffsetArray{Int128}(undef,0:k_max)
@@ -92,7 +93,7 @@ end
 
 # sum into 1st partition function:
 for k = 0:k_max
-    part1[k] = sum(p[:,k])/2
+    part1[k] = sum(p[:,k])
 end 
 
 part1
